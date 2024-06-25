@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple, Union
 import numpy as np
 import torch
 from torch import nn
-
+from time import time
 from doctr.models.detection._utils import _remove_padding
 from doctr.models.preprocessor import PreProcessor
 from doctr.models.utils import set_device_and_dtype
@@ -55,17 +55,33 @@ class DetectionPredictor(nn.Module):
         self.model, processed_batches = set_device_and_dtype(
             self.model, processed_batches, _params.device, _params.dtype
         )
+        # for batch in processed_batches:
+        #     print("batch: ", batch.shape)
+        #     print("batch: ", batch)
+        # start_time = time()
         predicted_batches = [
             self.model(batch, return_preds=True, return_model_output=True, **kwargs) for batch in processed_batches
         ]
+        # for pred in predicted_batches:
+        #     print("pred: ", pred)
+        # end_time = time()
+        # print(f"Time taken for detect inference: {end_time - start_time}")
         # Remove padding from loc predictions
+        if isinstance(pages[0], torch.Tensor):
+            padding_pages = [page.permute(1, 2, 0) for page in pages]
+        else:
+            padding_pages = pages
+        # start_time = time()
         preds = _remove_padding(
-            pages,  # type: ignore[arg-type]
+            padding_pages,  # type: ignore[arg-type]
             [pred for batch in predicted_batches for pred in batch["preds"]],
             preserve_aspect_ratio=preserve_aspect_ratio,
             symmetric_pad=symmetric_pad,
             assume_straight_pages=assume_straight_pages,
         )
+        # end_time = time()
+        # print(f"Time taken for remove padding: {end_time - start_time}")
+
 
         if return_maps:
             seg_maps = [

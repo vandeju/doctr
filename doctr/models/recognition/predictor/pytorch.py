@@ -8,7 +8,7 @@ from typing import Any, List, Sequence, Tuple, Union
 import numpy as np
 import torch
 from torch import nn
-
+from time import time
 from doctr.models.preprocessor import PreProcessor
 from doctr.models.utils import set_device_and_dtype
 
@@ -52,7 +52,7 @@ class RecognitionPredictor(nn.Module):
         # Dimension check
         if any(crop.ndim != 3 for crop in crops):
             raise ValueError("incorrect input shape: all crops are expected to be multi-channel 2D images.")
-
+        
         # Split crops that are too wide
         remapped = False
         if self.split_wide_crops:
@@ -67,15 +67,19 @@ class RecognitionPredictor(nn.Module):
                 crops = new_crops
 
         # Resize & batch them
+        # start_time = time()
         processed_batches = self.pre_processor(crops)
-
+        # end_time = time()
+        # print(f"Time taken for pre-processing: {end_time - start_time}")
         # Forward it
         _params = next(self.model.parameters())
         self.model, processed_batches = set_device_and_dtype(
             self.model, processed_batches, _params.device, _params.dtype
         )
+        # start_time = time()
         raw = [self.model(batch, return_preds=True, **kwargs)["preds"] for batch in processed_batches]
-
+        # end_time = time()
+        # print(f"Time taken for reco inference: {end_time - start_time}")
         # Process outputs
         out = [charseq for batch in raw for charseq in batch]
 

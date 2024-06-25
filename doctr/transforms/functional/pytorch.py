@@ -8,7 +8,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
-from torchvision.transforms import functional as F
+from torchvision.transforms.v2 import functional as F
 
 from doctr.utils.geometry import rotate_abs_geoms
 

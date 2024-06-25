@@ -2,7 +2,7 @@
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
+from time import time
 from typing import Any, List, Union
 
 import numpy as np
@@ -75,17 +75,21 @@ class OCRPredictor(nn.Module, _OCRPredictor):
         # Dimension check
         if any(page.ndim != 3 for page in pages):
             raise ValueError("incorrect input shape: all pages are expected to be multi-channel 2D images.")
-
+        # time_a = time()
         origin_page_shapes = [page.shape[:2] if isinstance(page, np.ndarray) else page.shape[-2:] for page in pages]
-
+        # time_b = time()
+        # step_A_time = time_b - time_a
         # Localize text elements
         loc_preds, out_maps = self.det_predictor(pages, return_maps=True, **kwargs)
-
+        # time_c = time()
+        # step_B_time = time_c - time_b
         # Detect document rotation and rotate pages
         seg_maps = [
             np.where(out_map > getattr(self.det_predictor.model.postprocessor, "bin_thresh"), 255, 0).astype(np.uint8)
             for out_map in out_maps
         ]
+        # time_d = time()
+        # step_C_time = time_d - time_c
         if self.detect_orientation:
             general_pages_orientations, origin_pages_orientations = self._get_orientations(pages, seg_maps)  # type: ignore[arg-type]
             orientations = [
@@ -95,25 +99,32 @@ class OCRPredictor(nn.Module, _OCRPredictor):
             orientations = None
             general_pages_orientations = None
             origin_pages_orientations = None
+        # time_e = time()
+        # step_D_time = time_e - time_d
         if self.straighten_pages:
             pages = self._straighten_pages(pages, seg_maps, general_pages_orientations, origin_pages_orientations)  # type: ignore
             # Forward again to get predictions on straight pages
             loc_preds = self.det_predictor(pages, **kwargs)
-
-        assert all(
+        # time_f = time()
+        # step_E_time = time_f - time_e
+        assert all (
             len(loc_pred) == 1 for loc_pred in loc_preds
         ), "Detection Model in ocr_predictor should output only one class"
 
         loc_preds = [list(loc_pred.values())[0] for loc_pred in loc_preds]
         # Detach objectness scores from loc_preds
+        # time_g = time()
+        # step_F_time = time_g - time_f
         loc_preds, objectness_scores = detach_scores(loc_preds)
         # Check whether crop mode should be switched to channels first
         channels_last = len(pages) == 0 or isinstance(pages[0], np.ndarray)
-
+        # time_h = time()
+        # step_G_time = time_h - time_g
         # Apply hooks to loc_preds if any
         for hook in self.hooks:
             loc_preds = hook(loc_preds)
-
+        # time_i = time()
+        # step_H_time = time_i - time_h
         # Crop images
         crops, loc_preds = self._prepare_crops(
             pages,  # type: ignore[arg-type]
@@ -121,6 +132,8 @@ class OCRPredictor(nn.Module, _OCRPredictor):
             channels_last=channels_last,
             assume_straight_pages=self.assume_straight_pages,
         )
+        # time_j = time()
+        # step_I_time = time_j - time_i
         # Rectify crop orientation and get crop orientation predictions
         crop_orientations: Any = []
         if not self.assume_straight_pages:
@@ -128,20 +141,24 @@ class OCRPredictor(nn.Module, _OCRPredictor):
             crop_orientations = [
                 {"value": orientation[0], "confidence": orientation[1]} for orientation in _crop_orientations
             ]
-
+        # time_k = time() 
+        # step_J_time = time_k - time_j
         # Identify character sequences
         word_preds = self.reco_predictor([crop for page_crops in crops for crop in page_crops], **kwargs)
         if not crop_orientations:
             crop_orientations = [{"value": 0, "confidence": None} for _ in word_preds]
-
+        # time_l = time()
+        # step_K_time = time_l - time_k
         boxes, text_preds, crop_orientations = self._process_predictions(loc_preds, word_preds, crop_orientations)
-
+        # time_m = time()
+        # step_L_time = time_m - time_l
         if self.detect_language:
             languages = [get_language(" ".join([item[0] for item in text_pred])) for text_pred in text_preds]
             languages_dict = [{"value": lang[0], "confidence": lang[1]} for lang in languages]
         else:
             languages_dict = None
-
+        # time_n = time()
+        # step_M_time = time_n - time_m
         out = self.doc_builder(
             pages,  # type: ignore[arg-type]
             boxes,
@@ -151,5 +168,14 @@ class OCRPredictor(nn.Module, _OCRPredictor):
             crop_orientations,
             orientations,
             languages_dict,
-        )
+        )  
+        # time_o = time()
+        # step_N_time = time_o - time_n
+        # steps = [{"step": "A", "time": step_A_time}, {"step": "B", "time": step_B_time}, {"step": "C", "time": step_C_time}, {"step": "D", "time": step_D_time}, {"step": "E", "time": step_E_time}, {"step": "F", "time": step_F_time}, {"step": "G", "time": step_G_time}, {"step": "H", "time": step_H_time}, {"step": "I", "time": step_I_time}, {"step": "J", "time": step_J_time}, {"step": "K", "time": step_K_time}, {"step": "L", "time": step_L_time}, {"step": "M", "time": step_M_time}, {"step": "N", "time": step_N_time}]
+        # for step in steps:
+
+        #     if step['time'] > 0.02:
+        #         print(f"Time taken for step {step['step']}: {step['time']} seconds")
+        #     else:
+        #         print(f"Time taken for step {step['step']}: negligible seconds")
         return out
